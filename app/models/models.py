@@ -10,8 +10,10 @@ from tortoise.functions import Sum
 import tempfile
 from app.utils import CategoriesSimilarity, get_this_month_filter, get_this_day_filter
 
-from app.keyboards import start_keyboard, cancel_keyboard, process_pagination_keyboard
+from app.keyboards import start_kb, cancel_kb, process_pagination_keyboard
 import matplotlib.pyplot as plt
+
+from app import constants as const
 
 
 class User(Model):
@@ -22,7 +24,7 @@ class User(Model):
     @classmethod
     async def start_command(cls, message: Message):
         await cls.get_or_create(telegram_id=message.chat.id)
-        await message.answer("Що робимо?", reply_markup=start_keyboard)
+        await message.answer(const.DIALOG_WHAT_DOING, reply_markup=start_kb)
 
     @classmethod
     async def update_monthly_limit(cls, message: Message, state: FSMContext):
@@ -35,7 +37,7 @@ class User(Model):
         await user.save()
         await message.answer(
             f"✅ Місячний ліміт оновленно до {message.text} грн",
-            reply_markup=start_keyboard,
+            reply_markup=start_kb,
         )
 
 
@@ -63,7 +65,7 @@ class Transaction(Model):
             .offset(offset)
         )
         if len(records) == 0:
-            await message.answer('У вас немає записів', reply_markup=start_keyboard)
+            await message.answer(const.DIALOG_NO_RECORDS, reply_markup=start_kb)
             return
 
         for r in records:
@@ -103,24 +105,22 @@ class Transaction(Model):
         try:
             amount = float(message.text)
         except ValueError:
-            await message.answer("Ти олух, цифру вводь", reply_markup=cancel_keyboard)
+            await message.answer(const.DIALOG_OLYX, reply_markup=cancel_kb)
             await state.set_state(FormRecord.amount)
             return
 
         await state.update_data(amount=amount)
         text = (
-            "До якої категорії ви б віднесли цю покупку? [продукти, косметика, кафе...]"
+            const.DIALOG_WHAT_CATEGORY
         )
-        await message.answer(text, reply_markup=cancel_keyboard)
+        await message.answer(text, reply_markup=cancel_kb)
         await state.set_state(FormRecord.category)
 
     @classmethod
     async def prepare_category(cls, message: Message, state: FSMContext):
         from main import FormRecord
-
         await state.update_data(category=message.text)
-        text = "Короткий опис вашої покупки, [Для чого? Які проблеми вирішило?...]"
-        await message.answer(text, reply_markup=cancel_keyboard)
+        await message.answer(const.DIALOG_DESCRIBE_CATEGORY, reply_markup=cancel_kb)
         await state.set_state(FormRecord.description)
 
     @classmethod
@@ -131,9 +131,9 @@ class Transaction(Model):
             user = await User.get_or_none(telegram_id=message.chat.id)
             await Transaction.create(**data, user_id=user.id)
             await state.clear()
-            await message.answer("✅ Успішно додано", reply_markup=start_keyboard)
+            await message.answer(const.DIALOG_SUCCESS_ADD, reply_markup=start_kb)
         except:
-            await message.answer("❌ Проблема з додаванням", reply_markup=start_keyboard)
+            await message.answer(const.DIALOG_DECLINE_ADD, reply_markup=start_kb)
 
     @classmethod
     async def month_report(cls, message: Message):
@@ -158,7 +158,7 @@ class Transaction(Model):
                 f"💸За місяць витрачено {res} грн"
                 f"\n⚖️ {round(res / user.monthly_limit * 100, 2)}% від вашого місячного ліміту"
             )
-        await message.answer(text, reply_markup=start_keyboard)
+        await message.answer(text, reply_markup=start_kb)
 
     @classmethod
     async def csv_month_report(cls, message: Message):
@@ -204,7 +204,7 @@ class Transaction(Model):
 
         res = 0 if len(res) == 0 else float(res[0]["sum"])
         text = f"💸За сьогодні витрачено {res} грн"
-        await message.answer(text, reply_markup=start_keyboard)
+        await message.answer(text, reply_markup=start_kb)
 
     @classmethod
     async def month_analytics(cls, message: Message):
@@ -213,7 +213,7 @@ class Transaction(Model):
         transactions = await Transaction.filter(user_id=user.id, **month_filter)
 
         if not transactions:
-            await message.answer("😒У вас немає транзакцій", reply_markup=start_keyboard)
+            await message.answer(const.DIALOG_NO_TRANSACTION, reply_markup=start_kb)
             return
 
         cat_names = await Transaction.filter(user_id=user.id).values_list(

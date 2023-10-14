@@ -8,4 +8,6 @@ ACTIONS = {
     const.MONTHLY_COSTS: "Витрати",
     const.MONTHLY_ANALYTICS: "Аналітика за місяць",
     const.ALL_RECORDS: "Записи",
+    const.CANCEL: "Відміна"
+
 }

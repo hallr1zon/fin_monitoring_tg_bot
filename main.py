@@ -16,7 +16,7 @@ from dotenv import load_dotenv
 from app import constants as const
 from app.actions import ACTIONS
 from app.models.models import User, Transaction
-from app.keyboards import start_keyboard, cancel_keyboard
+from app.keyboards import start_kb, cancel_kb
 
 load_dotenv()
 
@@ -38,35 +38,19 @@ bot = Bot(TOKEN, parse_mode=ParseMode.HTML)
 
 
 @dp.message(CommandStart())
-async def command_start_handler(message: Message, state: FSMContext) -> None:
-    """ /start command """
+async def command_start_handler(message: Message) -> None:
     await User.start_command(message)
 
 
-@dp.message(F.text.casefold() == "відміна")
+@dp.message(F.text.casefold() == ACTIONS[const.CANCEL].lower())
 async def cancel_handler(message: Message, state: FSMContext) -> None:
-    current_state = await state.get_state()
-    if current_state is None:
-        await message.answer(
-            "🤝Відміна успішна",
-            reply_markup=start_keyboard,
-        )
-        return
-
-    logging.info("Cancelling state %r", current_state)
     await state.clear()
-    await message.answer(
-        "🤝Відміна успішна",
-        reply_markup=start_keyboard,
-    )
+    await message.answer(const.DIALOG_CANCEL, reply_markup=start_kb)
 
 
 @dp.message(F.text.lower() == ACTIONS[const.ADD_RECORD].lower())
 async def add_new_record(message: types.Message, state: FSMContext):
-    await message.answer(
-        "Скільки коштів ви витратили?",
-        reply_markup=cancel_keyboard
-    )
+    await message.answer(const.DIALOG_SPEND, reply_markup=cancel_kb)
     await state.set_state(FormRecord.amount)
 
 
@@ -89,7 +73,7 @@ async def process_description(message: Message, state: FSMContext) -> None:
 async def update_budget(message: types.Message):
     buttons = [
         [
-            types.InlineKeyboardButton(text="Змінити", callback_data="button_1"),
+            types.InlineKeyboardButton(text="Змінити", callback_data="change_limit"),
         ],
     ]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
@@ -97,7 +81,7 @@ async def update_budget(message: types.Message):
     await message.answer(f"💳Ліміт: {user.monthly_limit} грн", reply_markup=keyboard)
 
 
-@dp.callback_query(lambda c: c.data == 'button_1')
+@dp.callback_query(lambda c: c.data == 'change_limit')
 async def process_callback_button1(callback_query: types.CallbackQuery, state):
     await bot.send_message(
         callback_query.message.chat.id,
@@ -116,27 +100,30 @@ async def process_monthly_amount(message: Message, state: FSMContext) -> None:
 async def monthly_costs(message: types.Message):
     buttons = [
         [
-            types.InlineKeyboardButton(text="Сьогодні", callback_data="button_2"),
-            types.InlineKeyboardButton(text="Місяць", callback_data="button_3"),
+            types.InlineKeyboardButton(text="Сьогодні", callback_data="day_analytics"),
+            types.InlineKeyboardButton(text="Місяць", callback_data="month_analytics"),
         ],
         [
-            types.InlineKeyboardButton(text="CSV звіт за місяць", callback_data="button_4"),
+            types.InlineKeyboardButton(text="CSV звіт за місяць", callback_data="csv_report"),
         ]
     ]
     keyboard = types.InlineKeyboardMarkup(inline_keyboard=buttons)
     await message.answer(f"Витрати за", reply_markup=keyboard)
 
-    @dp.callback_query(lambda c: c.data == 'button_2')
-    async def process_callback_button1(callback_query: types.CallbackQuery):
-        await Transaction.day_report(callback_query.message)
 
-    @dp.callback_query(lambda c: c.data == 'button_3')
-    async def process_callback_button1(callback_query: types.CallbackQuery):
-        await Transaction.month_report(callback_query.message)
+@dp.callback_query(lambda c: c.data == 'day_analytics')
+async def process_callback_button1(callback_query: types.CallbackQuery):
+    await Transaction.day_report(callback_query.message)
 
-    @dp.callback_query(lambda c: c.data == 'button_4')
-    async def process_callback_button1(callback_query: types.CallbackQuery):
-        await Transaction.csv_month_report(callback_query.message)
+
+@dp.callback_query(lambda c: c.data == 'month_analytics')
+async def process_callback_button1(callback_query: types.CallbackQuery):
+    await Transaction.month_report(callback_query.message)
+
+
+@dp.callback_query(lambda c: c.data == 'csv_report')
+async def process_callback_button1(callback_query: types.CallbackQuery):
+    await Transaction.csv_month_report(callback_query.message)
 
 
 @dp.message(F.text.lower() == ACTIONS[const.MONTHLY_ANALYTICS].lower())
@@ -156,7 +143,7 @@ async def process_callback_button1(callback_query: types.CallbackQuery, state):
 
     await tr.delete()
     await callback_query.bot.delete_message(callback_query.message.chat.id, callback_query.message.message_id)
-    await callback_query.bot.answer_callback_query(callback_query.id, "Запис успішно видалено", )
+    await callback_query.bot.answer_callback_query(callback_query.id, const.DIALOG_DELETE_RECORD, )
 
 
 @dp.message(F.text.regexp('.*<-Сторінка'))
@@ -183,7 +170,7 @@ async def db_init() -> None:
 async def main() -> None:
     await asyncio.gather(
         bot_pulling(),
-        db_init()
+        db_init(),
     )
 
 
